@@ -1,0 +1,18 @@
+{
+  "type": "module",
+  "name": "taus-cli",
+  "version": "1.0.0",
+  "description": "CLI for the Tauri Updater Server",
+  "main": "main.js",
+  "license": "MIT",
+  "dependencies": {
+    "sequelize": "^6.19.0",
+    "sequelize-auto": "^0.8.8",
+    "sqlite3": "^5.0.8",
+    "yargs": "^17.5.1"
+  },
+  "scripts": {
+    "start": "node main.js",
+    "db-auto": "sequelize-auto -i './models' -h localhost -u d  --dialect sqlite -d './private/db' -l esm"
+  }
+}
