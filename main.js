@@ -20,6 +20,8 @@ try {
 
     const { events, licences, releases, channels, subscriptions, archs } = initModels(db)
 
+    //This is here until a new version of Sequelize will add a specific directive to prevent the automatic generation of a primary key.
+    subscriptions.removeAttribute('id')
 
 let argv = yargs(process.argv.slice(2));
 
@@ -84,12 +86,42 @@ async function licence_add(secret,enabled,chs){
     }
 }
     
-async function licence_subscribe(secret, channels) {
-    
+async function licence_subscribe(secret, chs) {
+    const t = await db.transaction();
+    try {
+        const query = await licences.findAll({ where: { secret: secret } }, { transaction: t })
+        if (query.length != 1) throw new Error(`Licence not matched!`);
+        for (const i in chs) {
+            const query2 = await channels.findAll({ where: { label: chs[i] } }, { transaction: t })
+            if (query2.length != 1) throw new Error(`Channel ${chs[i]} not matched!`);
+            const tmp = await subscriptions.create({ licence: query[0].id, channel: query2[0].id }, { transaction: t })
+        }
+
+        await t.commit();
+    }
+    catch (error) {
+        await t.rollback();
+        throw (error)
+    }
 }
     
-async function licence_leave(secret, channels) {
-    
+async function licence_leave(secret, chs) {
+    const t = await db.transaction();
+    try {
+        const query = await licences.findAll({ where: { secret: secret } }, { transaction: t })
+        if (query.length != 1) throw new Error(`Licence not matched!`);
+        for (const i in chs) {
+            const query2 = await channels.findAll({ where: { label: chs[i] } }, { transaction: t })
+            if (query2.length != 1) throw new Error(`Channel ${chs[i]} not matched!`);
+            const tmp = await subscriptions.destroy({ where: { licence: query[0].id, channel: query2[0].id } }, { transaction: t })
+        }
+
+        await t.commit();
+    }
+    catch (error) {
+        await t.rollback();
+        throw (error)
+    }
 }
 
 async function licence_rm(secret){
@@ -244,26 +276,32 @@ argv
                 handler: (argv) => { return licence_rm(argv.secret); },
             })
             .command({
-                command: "subscribe <secret>",
+                command: "subscribe <secret> [channels]",
                 desc: "Subscribe a licence to channels",
                 aliases:["join","sub"],
                 builder: {
                     secret: {
                         positional:true
+                    },
+                    channels: {
+                        type:'array'
                     }
                 },
-                handler: (argv) => { return licence_rem(argv.secret); },
+                handler: (argv) => { return licence_subscribe(argv.secret,argv.channels); },
             })
             .command({
-                command: "subscribe <secret>",
-                desc: "Subscribe a licence to channels",
-                aliases:["join","sub"],
+                command: "leave <secret> [channels]",
+                desc: "Let a licence leave channels",
+                aliases:[],
                 builder: {
                     secret: {
                         positional:true
+                    },
+                    channels: {
+                        type:'array'
                     }
                 },
-                handler: (argv) => { return licence_rem(argv.secret); },
+                handler: (argv) => { return licence_leave(argv.secret,argv.channels); },
             })
             .command({
                 command: "activate <secret>",
