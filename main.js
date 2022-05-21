@@ -52,20 +52,53 @@ async function channel_rm(label){
     const query = await channels.destroy({ where: { label: label } })
     if (!query) throw new Error("Channel not in DB. It cannot be removed.");
 }
-
-function licence_add(label,channels){
-    console.log("licence_add")
-    return false;
+    
+async function licence_ls(){
+    const query = await licences.findAll({})
+    if (query.length > 0) for(const i of query) {
+        const subs = await subscriptions.findAll({ attributes: ["licence", "channel"], where: { licence: i["id"] } });
+        let subs_list = []
+        for(const i of subs) {
+            const tmp = await channels.findAll({ where: { id: i["channel"] } });
+            subs_list.push(tmp[0]["label"])            
+        }
+        console.log(i["id"] + "\t" + i["secret"] + "\t" + i["enabled"] + "\t" + subs_list)
+    }
 }
 
-function licence_rm(label,channels){
-    console.log("licence_rm")
-    return false;
+async function licence_add(secret,channels){
+    const t = await db.transaction();
+    try {
+        /*
+        const user = await User.create({
+            firstName: 'Bart',
+            lastName: 'Simpson'
+        }, { transaction: t });
+        */
+
+        await t.commit();
+    }
+    catch (error) {
+        await t.rollback();
+        throw (error)
+    }
+}
+    
+async function licence_subscribe(secret, channels) {
+    
+}
+    
+async function licence_leave(secret, channels) {
+    
 }
 
-function licence_status(label,status){
-    console.log("licence_status")
-    return false;
+async function licence_rm(secret){
+    const query = await licences.destroy({ where: { secret: secret } })
+    if (!query) throw new Error("Licence cannot be removed.");
+}
+
+async function licence_status(secret,status){
+    const query = await licences.update({ enabled: status }, { where: { secret: secret }});
 }
 
 function release_deploy(file,desc,arch,channels){
@@ -157,7 +190,7 @@ argv
                 handler: (argv) => { return channel_add(argv.label); },
             })
             .command({
-                command: "destroy <label>",
+                command: "delete <label>",
                 desc: "Destroy a channel",
                 aliases:["remove","rm"],
                 builder: {
@@ -179,11 +212,11 @@ argv
                 aliases:["ls"],
                 builder: {
                 },
-                handler: (argv) => { return channel_ls(); },
+                handler: (argv) => { return licence_ls(); },
             })
             .command({
-                command: "register <secret> [enabled]",
-                desc: "Register a new channel",
+                command: "new <secret> [enabled]",
+                desc: "Register a new licence",
                 aliases:["add"],
                 builder: {
                     secret: {
@@ -197,19 +230,41 @@ argv
                 handler: (argv) => { return licence_add(argv.secret,argv.enabled); },
             })
             .command({
-                command: "unregister <secret>",
-                desc: "Remove a licence registation",
-                aliases:["remove","rem"],
+                command: "delete <secret>",
+                desc: "Destroy a licence",
+                aliases:["remove","rm"],
                 builder: {
                     secret: {
                         positional:true
                     }
                 },
-                handler: (argv) => { return licence_rem(argv.label); },
+                handler: (argv) => { return licence_rm(argv.secret); },
             })
             .command({
-                command: "enable <secret>",
-                desc: "Enable a licence",
+                command: "subscribe <secret>",
+                desc: "Subscribe a licence to channels",
+                aliases:["join","sub"],
+                builder: {
+                    secret: {
+                        positional:true
+                    }
+                },
+                handler: (argv) => { return licence_rem(argv.secret); },
+            })
+            .command({
+                command: "subscribe <secret>",
+                desc: "Subscribe a licence to channels",
+                aliases:["join","sub"],
+                builder: {
+                    secret: {
+                        positional:true
+                    }
+                },
+                handler: (argv) => { return licence_rem(argv.secret); },
+            })
+            .command({
+                command: "activate <secret>",
+                desc: "Activate a licence",
                 aliases:[],
                 builder: {
                     secret: {
@@ -219,8 +274,8 @@ argv
                 handler: (argv) => { return licence_status(argv.secret,true); },
             })
             .command({
-                command: "suspend <secret>",
-                desc: "Make a channel hidden",
+                command: "revoke <secret>",
+                desc: "Revoke a licence",
                 aliases:[],
                 builder: {
                     secret: {
@@ -233,6 +288,19 @@ argv
             .strict()
     })
 
+    .command("release", "Command aggregator for operations on releases.", (argv) => {
+        return argv
+            .command({
+                command: "list",
+                desc: "List all releases",
+                aliases:["ls"],
+                builder: {
+                },
+                handler: (argv) => { return licence_ls(); },
+            })
+            .demandCommand(1)
+            .strict()
+    })
     .demandCommand(1)
     .strict()
     .parse()
