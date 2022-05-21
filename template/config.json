@@ -1,0 +1,8 @@
+{
+	"relative-path":true,
+	"db": {
+		"dialect": "sqlite",
+		"storage": "db",
+		"logging": false
+	}
+}

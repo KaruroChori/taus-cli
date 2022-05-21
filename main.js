@@ -1,41 +1,56 @@
 #!/usr/bin/env node
-
+import * as fs from 'fs';
+import os  from 'os';
+import { exit } from 'process';
 import yargs from "yargs"
+
+const HOME = os.homedir()
+
+import { Sequelize, Op, Model, DataTypes } from 'sequelize';
+import initModels from "./models/init-models.js"
+
+
+try {
+    let config = JSON.parse(fs.readFileSync(HOME + "/.config/taus-cli/config.json"))
+
+    //Normalize path in case it is a local resource and relative path is selected.
+    if (config["relative-path"] == true && config.db.dialect == 'sqlite') config.db.storage = HOME + "/.config/taus-cli/" + config.db.storage
+    const db = new Sequelize(config.db);
+    await db.authenticate();
+
+    const { events, licences, releases, channels, subscriptions, archs } = initModels(db)
+
+
 let argv = yargs(process.argv.slice(2));
 
-function arch_ls(){
-    console.log("arch_ls")
-    return false;
+async function arch_ls(){
+    const query = await archs.findAll({})
+    if(query.length>0)query.forEach((i) => { console.log(i["id"]+"\t"+i["label"]) })
 }
 
-function arch_add(label){
-    console.log("arch_add "+label)
-    return false;
+async function arch_add(label){
+    const query = await archs.create({ label: label })
+    console.log(query["id"]+"\t"+query["label"])  
 }
 
-function arch_rm(label){
-    console.log("arch_rm "+label)
-    return false;
+async function arch_rm(label){
+    const query = await archs.destroy({ where: { label: label } })
+    if (!query) throw new Error("Arch not in DB. It cannot be removed.");
 }
 
-function channel_ls(visible){
-    console.log("channel_ls")
-    return false;
+async function channel_ls(){
+    const query = await channels.findAll({})
+    if(query.length>0)query.forEach((i) => { console.log(i["id"]+"\t"+i["label"]) })
 }
 
-function channel_add(label, visible){
-    console.log("channel_ls "+label+" "+visible)
-    return false;
+async function channel_add(label){
+    const query = await channels.create({ label: label })
+    console.log(query["id"]+"\t"+query["label"])  
 }
 
-function channel_rm(label){
-    console.log("channel_ls")
-    return false;
-}
-
-function channel_status(label,status){
-    console.log("channel_status")
-    return false;
+async function channel_rm(label){
+    const query = await channels.destroy({ where: { label: label } })
+    if (!query) throw new Error("Channel not in DB. It cannot be removed.");
 }
 
 function licence_add(label,channels){
@@ -108,13 +123,13 @@ argv
             .command({
                 command: "unsupport <label>",
                 desc: "Remove support for an architecture",
-                aliases:["remove","rem"],
+                aliases:["remove","rm"],
                 builder: {
                     label: {
                         positional:true
                     }
                 },
-                handler: (argv) => { return arch_rem(argv.label); },
+                handler: (argv) => { return arch_rm(argv.label); },
             })
             .demandCommand(1)
             .strict()
@@ -131,52 +146,26 @@ argv
                 handler: (argv) => { return channel_ls(); },
             })
             .command({
-                command: "new <label> [enabled]",
+                command: "new <label>",
                 desc: "Add a new channel",
                 aliases:["add"],
                 builder: {
                     label: {
                         positional:true
-                    },
-                    enabled: {
-                        boolean: true,
-                        default: false
                     }
                 },
-                handler: (argv) => { return channel_add(argv.label,argv.enabled); },
+                handler: (argv) => { return channel_add(argv.label); },
             })
             .command({
                 command: "destroy <label>",
-                desc: "Remove support for an architecture",
-                aliases:["remove","rem"],
+                desc: "Destroy a channel",
+                aliases:["remove","rm"],
                 builder: {
                     label: {
                         positional:true
                     }
                 },
-                handler: (argv) => { return channel_rem(argv.label); },
-            })
-            .command({
-                command: "show <label>",
-                desc: "Make a channel visible",
-                aliases:[],
-                builder: {
-                    label: {
-                        positional:true
-                    }
-                },
-                handler: (argv) => { return channel_status(argv.label,true); },
-            })
-            .command({
-                command: "hide <label>",
-                desc: "Make a channel hidden",
-                aliases:[],
-                builder: {
-                    label: {
-                        positional:true
-                    }
-                },
-                handler: (argv) => { return channel_status(argv.label,false); },
+                handler: (argv) => { return channel_rm(argv.label); },
             })
             .demandCommand(1)
             .strict()
@@ -247,3 +236,10 @@ argv
     .demandCommand(1)
     .strict()
     .parse()
+
+
+}
+catch(e) {
+    console.error(e);
+    exit(1)
+}
