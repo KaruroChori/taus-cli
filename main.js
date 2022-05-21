@@ -25,12 +25,12 @@ let argv = yargs(process.argv.slice(2));
 
 async function arch_ls(){
     const query = await archs.findAll({})
-    if(query.length>0)query.forEach((i) => { console.log(i["id"]+"\t"+i["label"]) })
+    if(query.length>0)query.forEach((i) => { console.log(i.id+"\t"+i.label) })
 }
 
 async function arch_add(label){
     const query = await archs.create({ label: label })
-    console.log(query["id"]+"\t"+query["label"])  
+    console.log(query.id+"\t"+query.label)  
 }
 
 async function arch_rm(label){
@@ -40,12 +40,12 @@ async function arch_rm(label){
 
 async function channel_ls(){
     const query = await channels.findAll({})
-    if(query.length>0)query.forEach((i) => { console.log(i["id"]+"\t"+i["label"]) })
+    if(query.length>0)query.forEach((i) => { console.log(i.id+"\t"+i.label) })
 }
 
 async function channel_add(label){
     const query = await channels.create({ label: label })
-    console.log(query["id"]+"\t"+query["label"])  
+    console.log(query.id+"\t"+query.label)  
 }
 
 async function channel_rm(label){
@@ -56,25 +56,25 @@ async function channel_rm(label){
 async function licence_ls(){
     const query = await licences.findAll({})
     if (query.length > 0) for(const i of query) {
-        const subs = await subscriptions.findAll({ attributes: ["licence", "channel"], where: { licence: i["id"] } });
+        const subs = await subscriptions.findAll({ attributes: ["licence", "channel"], where: { licence: i.id } });
         let subs_list = []
         for(const i of subs) {
-            const tmp = await channels.findAll({ where: { id: i["channel"] } });
-            subs_list.push(tmp[0]["label"])            
+            const tmp = await channels.findAll({ where: { id: i.channel } });
+            subs_list.push(tmp[0].label)            
         }
-        console.log(i["id"] + "\t" + i["secret"] + "\t" + i["enabled"] + "\t" + subs_list)
+        console.log(i.id + "\t" + i.secret + "\t" + i.enabled + "\t" + subs_list)
     }
 }
 
-async function licence_add(secret,channels){
+async function licence_add(secret,enabled,chs){
     const t = await db.transaction();
     try {
-        /*
-        const user = await User.create({
-            firstName: 'Bart',
-            lastName: 'Simpson'
-        }, { transaction: t });
-        */
+        const query = await licences.create({ secret: secret, enabled: enabled }, { transaction: t })
+        for (const i in chs) {
+            const query2 = await channels.findAll({ where: { label: chs[i] } }, { transaction: t })
+            if (query2.length != 1) throw new Error(`Channel ${chs[i]} not matched!`);
+            const tmp = await subscriptions.create({ licence: query.id, channel: query2[0].id }, { transaction: t })
+        }
 
         await t.commit();
     }
@@ -215,7 +215,7 @@ argv
                 handler: (argv) => { return licence_ls(); },
             })
             .command({
-                command: "new <secret> [enabled]",
+                command: "new <secret> [enabled] [channels]",
                 desc: "Register a new licence",
                 aliases:["add"],
                 builder: {
@@ -225,9 +225,12 @@ argv
                     enabled: {
                         boolean: true,
                         default: false
+                    },
+                    channels: {
+                        type: 'array'
                     }
                 },
-                handler: (argv) => { return licence_add(argv.secret,argv.enabled); },
+                handler: (argv) => { return licence_add(argv.secret,argv.enabled,argv.channels); },
             })
             .command({
                 command: "delete <secret>",
