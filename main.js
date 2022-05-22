@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import * as fs from 'fs';
-import os  from 'os';
+import os, { release }  from 'os';
 import { exit } from 'process';
 import yargs from "yargs"
 
@@ -133,34 +133,32 @@ async function licence_status(secret,status){
     const query = await licences.update({ enabled: status }, { where: { secret: secret }});
 }
 
-function release_deploy(file,desc,arch,channels){
+async function release_deploy(file,desc,arch,channels){
     console.log("release_deploy")
     return false;
 }
 
-function release_distrib(id,channels){
-    console.log("release_distrib")
-    return false;
+async function release_ls(arch, ch) {
+    let w = {}
+    if (arch) { const v = await archs.findAll({ where: { label: arch } }); if (v.length != 1) throw new Error(`Cannot find arch ${arch}`); w.arch = v[0].id }
+    if (ch) { const v = await channels.findAll({ where: { label: ch } }); if (v.length != 1) throw new Error(`Cannot find channel ${ch}`); w.ch = v[0].id }
+    
+    const query = await releases.findAll({ where: w })
+    
+    for (const i of query) {
+        const l_arch = await archs.findAll({ where: { id: i.arch } }); if (l_arch.length != 1) throw new Error(`Cannot find arch ${i.arch}`);
+        const l_ch = await channels.findAll({ where: { id: i.channel } }); if (l_ch.length != 1) throw new Error(`Cannot find arch ${i.channel}`);
+        console.log(i.id+"\t"+i.version+"\t"+l_arch[0].label+"\t"+l_ch[0].label+"\t"+i.notes+"\t"+i.path+"\t"+i.enabled)
+    }
 }
 
-function release_revoke(id,channels){
-    console.log("release_revoke")
-    return false;
+async function release_rm(id){
+    const query = await releases.destroy({ where: { id: id } })
+    if (!query) throw new Error("Release cannot be removed.");
 }
 
-function release_ls(arch_where,channel_where){
-    console.log("release_ls")
-    return false;
-}
-
-function release_rm(id){
-    console.log("release_rm")
-    return false;
-}
-
-function release_status(id,status){
-    console.log("release_status")
-    return false;
+async function release_status(id,status){
+    const query = await licences.update({ enabled: status }, { where: { id: id }});
 }
 
 argv
@@ -332,12 +330,65 @@ argv
     .command("release", "Command aggregator for operations on releases.", (argv) => {
         return argv
             .command({
-                command: "list",
-                desc: "List all releases",
+                command: "list [arch] [channel]",
+                desc: "List all releases with optional constraints",
                 aliases:["ls"],
                 builder: {
+                    arch: {
+                        default: null
+                    },
+                    channel: {
+                        default: null 
+                    }
                 },
-                handler: (argv) => { return licence_ls(); },
+                handler: (argv) => { return release_ls(argv.arch,argv.channel); },
+            })
+            .command({
+                command: "deploy <path> [enabled] [notes] [archs] [channels] [signature]",
+                desc: "List all releases",
+                aliases:["add"],
+                builder: {
+                    archs: {
+                        type:'array'
+                    },
+                    channels: {
+                        type:'array'
+                    }
+                },
+                handler: (argv) => { return release_deploy(); },
+            })
+            .command({
+                command: "delete <id>",
+                desc: "Destroy a licence",
+                aliases:["remove","rm"],
+                builder: {
+                    id: {
+                        positional:true
+                    }
+                },
+                handler: (argv) => { return release_rm(argv.id); },
+            })
+            .command({
+                command: "enable <id>",
+                desc: "Enable a release",
+                aliases:[],
+                builder: {
+                    id: {
+                        positional:true
+                    }
+                },
+                handler: (argv) => { return release_status(argv.id,true); },
+            })
+            .command({
+                command: "disable <id>",
+                desc: "Disable a release",
+                aliases:[],
+                builder: {
+                    id: {
+                        positional:true
+                    }
+                },
+                handler: (argv) => { return release_status(argv.id, false); },
             })
             .demandCommand(1)
             .strict()
