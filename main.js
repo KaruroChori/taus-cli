@@ -133,12 +133,76 @@ async function licence_status(secret,status){
     const query = await licences.update({ enabled: status }, { where: { secret: secret }});
 }
 
-async function release_deploy(file,desc,arch,channels){
-    console.log("release_deploy")
-    return false;
+async function release_deploy(path, enabled, notes, as, cs, signature, version) {
+    const date = Date.now()
+    const t = await db.transaction();
+    try {
+        for (const i in as) {
+            for (const j in cs) {
+                let current = version;
+                if (!version) {
+                    const v = await releases.findAll({
+                        include: [
+                            { model: archs, as: "arch_arch" },
+                            { model: channels, as: "channel_channel" }
+                        ],
+                        where: {
+                            '$arch_arch.label$': as[i],
+                            '$channel_channel.label$': cs[j],
+                        },
+                        order: [
+                            ['version', 'DESC']
+                        ],
+                        limit: 1
+                    }, { transaction: t })
+                    if (v.length == 1) current = v[0].version + 1;
+                    else current = 0
+                }
+                //Resolve id for channel
+
+                const l_a = await archs.findAll({ where: { label: as[i] } }, { transaction: t });
+                if (l_a.length != 1) throw new Error(`Arch ${as[i]} not matched!`);
+                
+                const l_c = await channels.findAll({ where: { label: cs[j] } }, { transaction: t });
+                if (l_c.length != 1) throw new Error(`Channel ${cs[j]} not matched!`);
+
+                //Insert the entry
+                const query = await releases.create({
+                    arch: l_a[0].id ,
+                    channel: l_c[0].id,
+                    enabled: enabled,
+                    notes: notes,
+                    signature: signature,
+                    path: path,
+                    version: current,
+                    date:date
+                })
+                //console.log(`record ${as[i]} ${cs[j]} ${current}`);
+            }
+        }
+
+        await t.commit();
+    }
+    catch (error) {
+        await t.rollback();
+        throw (error)
+    }
 }
 
 async function release_ls(arch, ch) {
+    /* In the future rewrite to allow for arrays and use join
+            const query = await releases.findAll({
+            include: [
+                { model: archs, as:"arch_arch" },
+                { model: channels, as:"channel_channel"}
+            ],
+            where: {
+                '$arch_arch.label$': { [Op.in]: as },
+                '$arch_arch.label$': { [Op.in]: cs },
+            }
+        },{transaction:t})
+    */    
+        
     let w = {}
     if (arch) { const v = await archs.findAll({ where: { label: arch } }); if (v.length != 1) throw new Error(`Cannot find arch ${arch}`); w.arch = v[0].id }
     if (ch) { const v = await channels.findAll({ where: { label: ch } }); if (v.length != 1) throw new Error(`Cannot find channel ${ch}`); w.ch = v[0].id }
@@ -344,18 +408,33 @@ argv
                 handler: (argv) => { return release_ls(argv.arch,argv.channel); },
             })
             .command({
-                command: "deploy <path> [enabled] [notes] [archs] [channels] [signature]",
+                command: "deploy <path> [archs] [channels] [enabled] [notes] [sign] [release]",
                 desc: "List all releases",
                 aliases:["add"],
                 builder: {
+                    path: {
+                        positional:true
+                    },
                     archs: {
                         type:'array'
                     },
                     channels: {
                         type:'array'
+                    },
+                    enabled: {
+                        type:'boolean',
+                        default:true
+                    },
+                    sign: {
+                    },
+                    notes: {
+                        
+                    },
+                    release: {
+                        
                     }
                 },
-                handler: (argv) => { return release_deploy(); },
+                handler: (argv) => { return release_deploy(argv.path, argv.enabled, argv.notes, argv.archs, argv.channels, argv.sign, argv.release); },
             })
             .command({
                 command: "delete <id>",
