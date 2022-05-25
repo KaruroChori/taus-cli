@@ -7,7 +7,7 @@ import yargs from "yargs"
 const HOME = os.homedir()
 
 import { Sequelize, Op, Model, DataTypes } from 'sequelize';
-import initModels from "./models/init-models.js"
+import {dbSchemas, apiSchemas} from "@taus-services/commons"
 
 
 try {
@@ -18,7 +18,7 @@ try {
     const db = new Sequelize(config.db);
     await db.authenticate();
 
-    const { events, licences, releases, channels, subscriptions, archs } = initModels(db)
+    const { events, licences, releases, channels, subscriptions, archs } = dbSchemas(db)
 
     //This is here until a new version of Sequelize will add a specific directive to prevent the automatic generation of a primary key.
     subscriptions.removeAttribute('id')
